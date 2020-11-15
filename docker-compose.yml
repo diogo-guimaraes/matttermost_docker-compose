@@ -1,0 +1,101 @@
+version: "3.7"
+
+# networks:
+#   web:
+#     external: true
+#   internal:
+#     external: false
+
+services:
+
+  traefik:
+    image: "traefik:v2.3"
+    container_name: "traefik"
+    command:
+      - "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.myresolver.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
+      - "--certificatesresolvers.myresolver.acme.email=postmaster@localhost"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - "./letsencrypt:/letsencrypt"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
+  mattermost:
+    image: mattermost/mattermost-prod-app:latest
+    container_name: mattermost_app
+    depends_on:
+      - db
+    restart: unless-stopped
+    volumes:
+      - /app_data:/mattermost
+      - /etc/localtime:/etc/localtime:ro
+    # networks:
+    #   - internal
+    #   - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mattermost_app.rule=Host(`localhost`)"
+      - "traefik.http.routers.mattermost_app.entrypoints=websecure"
+      - "traefik.http.routers.mattermost_app.tls.certresolver=myresolver"
+    environment:
+      - edition=team
+      - DB_HOST=db
+      - DB_PORT_NUMBER=5432
+      - MM_DBNAME=mattermost
+      - MM_USERNAME=mmuser
+      - MM_PASSWORD=123456
+      - MM_PLUGINSETTINGS_ENABLEUPLOADS=true
+    ports: 
+      - "80:80"
+
+
+
+  db:
+    image: mattermost/mattermost-prod-db:latest
+    volumes:
+      - /db_data:/var/lib/postgresql/data
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - POSTGRES_DB=mattermost
+      - POSTGRES_USER=mmuser
+      - POSTGRES_PASSWORD=123456
+    # networks:
+    #   - internal
+    labels:
+      - "traefik.enable=false"
+    ports: 
+     - "5432:5432"
+      
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: mattermost-pgadmin
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=conta@aquivaleapena.com
+      - PGADMIN_DEFAULT_PASSWORD=pna229933
+    # networks:
+    #   - internal
+    #   - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pgadmin.rule=Host(`localhost`)"
+      - "traefik.http.routers.pgadmin.entrypoints=websecure"
+      - "traefik.http.routers.pgadmin.tls.certresolver=myresolver"
+    ports:
+      - "81:80"
+
+volumes:
+  app_data:
+  db_data:
